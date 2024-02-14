@@ -4,6 +4,8 @@ import threading
 import datetime
 import struct
 
+
+
 #Global Value for Current Command
 currentCommand = ""
 
@@ -209,7 +211,9 @@ def createPacket(command, data):
     command_byte = struct.pack('B', commands.get(command))
 
     # Convert data to bytes
-    data_bytes = data.encode('utf-8')
+    #data_bytes = data.encode('utf-8')
+    #already encoded
+    data_bytes = data
 
     # Get the length of data after converting to bytes
     data_length = len(data_bytes)
@@ -236,19 +240,43 @@ def addServices(servicesConfigFile):
     None
     """
     with open(servicesConfigFile, 'r') as file:
+        """
         # Skip the first line (headers)
         next(file)
+        """
+        #skip the first 4 lines (headers and service already done)
+        for i in range (0,4):
+            next(file)
         # Read each line of the CSV file
         for line in file:
+            if not line:
+                print(f"{getTimestampString()}Carousel Config File Error: No Service Data")
+                break
             # Split the line by comma (assuming it's a CSV file)
             columns = line.strip().split(',')
+            if (len(columns) != 5):
+                print(f"{getTimestampString()}Carousel Config File Error: Carousel Data Insufficient")
+                break
             scte35_Service_Id = columns[0]
             scte35_PID = columns[1]
             scte35_Rate = columns[2]
             channelName = columns[3]
             channelTag = columns[4]
             #create the packet
-            packet = createPacket("COMMAND_CAROUSEL_ADD_STREAM", f"{scte35_Service_Id},{scte35_PID},{scte35_Rate},{channelName},{channelTag}")
+            columns = [scte35_Service_Id, scte35_PID, scte35_Rate, channelName, channelTag]
+
+            # Convert each integer value to bytes and concatenate them into a byte array
+            byte_array = b''
+            for value in columns:
+                if isinstance(value, int):
+                    byte_array += value.to_bytes(2, 'big')  # Convert integer to a 2 bytes
+                elif isinstance(value, str):
+                    byte_array += value.encode()           # Convert string to bytes
+                else:
+                    # Handle other types of values as needed
+                    pass
+            
+            packet = createPacket("COMMAND_CAROUSEL_ADD_STREAM", byte_array)
             sendMessageTCP(packet)
             print(f"{getTimestampString()}Adding Stream {channelName} to Primary Carousel")
             
@@ -303,8 +331,19 @@ def startCarousel(programID, eventID):
     Returns:
     None
     """
-    startMessage = f"0{programID}{eventID}"
-    packet = createPacket("COMMAND_CAROUSEL_START", startMessage)
+    #startMessage = f"0{programID}{eventID}"
+    columns = [programID, eventID]
+    # Convert each integer value to bytes and concatenate them into a byte array
+    byte_array = b''
+    for value in columns:
+        if isinstance(value, int):
+            byte_array += value.to_bytes(2, 'big')  # Convert integer to a 2 bytes
+        elif isinstance(value, str):
+            byte_array += value.encode()           # Convert string to bytes
+        else:
+            # Handle other types of values as needed
+            pass
+    packet = createPacket("COMMAND_CAROUSEL_START", byte_array)
     sendMessageTCP(packet)
     print(f"{getTimestampString()}Starting Primary Carousel for Program ID {programID}, Event ID {eventID}")
     
@@ -319,14 +358,96 @@ def stopCarousel(programID, eventID):
     Returns:
     None
     """
-    stopMessage = f"0{programID}{eventID}"
-    packet = createPacket("COMMAND_CAROUSEL_STOP", stopMessage)
+    #stopMessage = f"0{programID}{eventID}"
+    #startMessage = f"0{programID}{eventID}"
+    columns = [programID, eventID]
+    # Convert each integer value to bytes and concatenate them into a byte array
+    byte_array = b''
+    for value in columns:
+        if isinstance(value, int):
+            byte_array += value.to_bytes(2, 'big')  # Convert integer to a 2 bytes
+        elif isinstance(value, str):
+            byte_array += value.encode()           # Convert string to bytes
+        else:
+            # Handle other types of values as needed
+            pass
+    packet = createPacket("COMMAND_CAROUSEL_STOP", byte_array)
     sendMessageTCP(packet)
     print(f"{getTimestampString()}Stopping Primary Carousel for Program ID {programID}, Event ID {eventID}")
     
 
+def configureCarousel(carouselConfig):
+    """
+    A function to configure the carousel
+    Parameters:
+    carouselConfig: The name of the carousel config file
+    Returns:
+    None
+    """
+    with open(carouselConfigFile, 'r') as file:
+        # Skip the first line (headers)
+        next(file)
+        line = next(file)
+        #if empty
+        if not line:
+            print(f"{getTimestampString()}Carousel Config File Error: No Carousel Data")
+            break
+        columns = line.strip().split(',')
+        if (len(columns) != 13):
+            print(f"{getTimestampString()}Carousel Config File Error: Carousel Data Insufficient")
+            break
+        carouselIP = columns[0]
+        carouselPort = columns[1]
+        hintIP = columns[2]
+        hintPort = columns[3]
+        streamDestIP = columns[4]
+        streamDestPort = columns[5]
+        bitrate = columns[6]  
+        patRate = columns[7]
+        pmtRate = columns[8]
+        pmtPID = columns[9]
+        streamSourceIP = columns[10]
+        streamSourcePort = columns[11]
+        hintDelay = columns[12]
+        #skip next line to get to the services
+        next(file)
+        line = next(file)
+        if not line:
+            print(f"{getTimestampString()}Carousel Config File Error: No Service Data")
+            break
+        columns = line.strip().split(',')
+        if (len(columns) != 5):
+            print(f"{getTimestampString()}Carousel Config File Error: Service Data Insufficient")
+            break
+        scte35_Service_Id = columns[0]
+        scte35_PID = columns[1]
+        scte35_Rate = columns[2]
+        channelName = columns[3]
+        channelTag = columns[4]
+        
+        data = [channelName,channelTag,carouselIP,carouselPort,hintIP,hintPort,streamDestIP,streamDestPort,bitrate,patRate,pmtRate,pmtPID,scte35_Service_Id,scte35_PID,scte35_Rate,streamSourceIP,streamSourcePort,hintDelay]
+        # Convert each integer value to bytes and concatenate them into a byte array
+        byte_array = b''
+        for value in data:
+            if isinstance(value, int):
+                byte_array += value.to_bytes(2, 'big')  # Convert integer to a 2 bytes
+            elif isinstance(value, str):
+                byte_array += value.encode()           # Convert string to bytes
+            else:
+                # Handle other types of values as needed
+                pass
+        packet = createPacket("COMMAND_CAROUSEL_CONFIG", byte_array)
+        sendMessageTCP(packet)
+        print(f"{getTimestampString()}Sending Carousel Config Data")
+
+            
+
 #Main
 if __name__ == "__main__":
+
+    #Global value for program version
+    programVersion = 1.0.0
+    print(f"Encoder Driver Version: {programVersion}")
     
     #set file names
     hintConfigFile = "hintConfig.csv"
@@ -357,7 +478,7 @@ if __name__ == "__main__":
     
     #send config message from TM to Carousel
     #NEED NEW VERSION OF CAROUSEL CODE.
-    #configureCarousel()
+    configureCarousel(carouselConfigFile)
     
     #add the services to the carousel
     addServices(servicesConfigFile)
