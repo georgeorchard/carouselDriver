@@ -249,9 +249,6 @@ def addServices(servicesConfigFile):
             next(file)
         # Read each line of the CSV file
         for line in file:
-            if not line:
-                print(f"{getTimestampString()}Carousel Config File Error: No Service Data")
-                break
             # Split the line by comma (assuming it's a CSV file)
             columns = line.strip().split(',')
             if (len(columns) != 5):
@@ -452,7 +449,7 @@ if __name__ == "__main__":
     #set file names
     hintConfigFile = "hintConfig.csv"
     carouselConfigFile = "carouselConfig.csv"
-    servicesConfigFile = "servicesConfig.csv"
+    #servicesConfigFile = "servicesConfig.csv"
     eventsScheduleFile = "eventSchedule.csv"
     
 
@@ -481,7 +478,7 @@ if __name__ == "__main__":
     configureCarousel(carouselConfigFile)
     
     #add the services to the carousel
-    addServices(servicesConfigFile)
+    addServices(carouselConfigFile)
     
     #Get a schedule of the events
     parseEvents(eventsScheduleFile)
