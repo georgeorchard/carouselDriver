@@ -208,7 +208,8 @@ def createPacket(command, data):
     Packet: The return packet
     """
     # Convert command to a single byte
-    command_byte = struct.pack('B', commands.get(command))
+    #command_byte = struct.pack('B', commands.get(command))
+    command_byte = command.to_bytes(2, byteorder='big')
 
     # Convert data to bytes
     #data_bytes = data.encode('utf-8')
@@ -223,10 +224,18 @@ def createPacket(command, data):
 
     # Combine all parts of the packet
     packet = b'\x00\x00' + command_byte + data_length_bytes + data_bytes
+    #pad with bytes of 00
+    current_length = len(packet)
+
+    # Calculate the required padding length
+    padding_length = 450 - current_length
+
+    # Add padding with bytes of 0x00
+    packet += b'\x00' * padding_length
     
     #update the current command
     global currentCommand
-    currentCommand = command
+    currentCommand = commands_by_value.get(command)
 
     return packet
 

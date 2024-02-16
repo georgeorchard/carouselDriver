@@ -1,1 +1,3 @@
-CarouselIP, CarouselPort
+CarouselIP, CarouselPort, HintIP, HintPort, StreamDestIP, StreamDestPort, Bitrate, PATRate, PMTRate, PMTPID, StreamSourceIP, StreamSourcePort, HintDelay
+
+SCTE35ServiceID, SCTE35PID, SCTE35Rate, ChannelName, ChannelTag
