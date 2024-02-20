@@ -9,7 +9,8 @@ import struct
 #Global Value for Current Command
 currentCommand = ""
 
-
+#global message ID
+messageID = 0
 
 #Define the commands
 commands = {
@@ -114,20 +115,27 @@ def listenToSocket(socket):
             
             #split the information
             hex_string = ''.join([hex(byte)[2:].zfill(2) for byte in data])
-            #commandValue = int(hex_string[4:6])
+            
+            #get the command
             commandValue = int(hex_string[4:8], 16)
             commandName = commands_by_value.get(commandValue)
-            #get the data length
-            dataLength = int(hex_string[8:10], 16)
+            
+            #take away the information (6 bytes)
+            data = data[6:]
+            hex_string = ''.join([hex(byte)[2:].zfill(2) for byte in data])
+
+            #get the data length (4 byte big endian structure at byte 13,14,15,16 (index 12,13,14,15))
+            dataLength = int(hex_string[24:32], 16)
+            
             
             #decode the actual data
-            # Extract data after the 5th byte (excluding the 5th byte)
-            #up to the data length 5 bytes to 5 + data length
-            
-            dataTrimmed = data[5:(5+dataLength)]
-            
-            decodedString = dataTrimmed.decode('ascii')
-            seperatedString = decodedString.split(',')
+            # Extract data after the 12th byte (excluding the 12th byte)
+            #up to the data length 12 bytes to 12 + data length
+            if (dataLength != 0):
+                dataTrimmed = data[12:(12+dataLength)]
+                
+                decodedString = dataTrimmed.decode('ascii')
+                seperatedString = decodedString.split(',')
             
             
             
@@ -139,18 +147,22 @@ def listenToSocket(socket):
             #If an ACK is received, respond based on the current command.
             if commandName == "RESPONSE_CAROUSEL_ACK":
                 if currentCommand = "COMMAND_CAROUSEL_CONFIG":
-                    print(f"{getTimestampString()}Primary Carousel accepted the update")
+                    print(f"{getTimestampString()}Primary Carousel ACCEPTED the config")
                 elif currentCommand = "COMMAND_CAROUSEL_ADD_STREAM":
-                    print(f"{getTimestampString()}Primary Carousel accepted the added stream")
+                    print(f"{getTimestampString()}Primary Carousel ACCEPTED the added stream")
                 elif currentCommand = "COMMAND_CAROUSEL_START":
                     print(f"{getTimestampString()}Primary Carousel STARTED")
                 elif currentCommand = "COMMAND_CAROUSEL_STOP":
-                    print(f"{getTimestampString()}Primary Carousel STOPPED")
+                    #print the cycle count - bytes 17,18,19,20 
+                    cycleCount = int(hex_string[32:40], 16)
+                    print(f"{getTimestampString()}Primary Carousel STOPPED, cycle count {cycleCount}")
+                    
+                    
                 elif currentCommand = "COMMAND_SEND_HINT":
                     #get hint data
                     programID = int(seperatedString[0])
                     eventID = int(seperatedString[1])
-                    print(f"{getTimestampString()}Primary Carousel accepted the hint for program ID {programID}, hint ID {hintID}")
+                    print(f"{getTimestampString()}Primary Carousel ACCEPTED the hint for program ID {programID}, hint ID {hintID}")
                     #get data about the hint
                     """
                     programID = int(hex_string[8:10])
@@ -161,7 +173,7 @@ def listenToSocket(socket):
                     
             if commandName == "RESPONSE_CAROUSEL_ERR":
                 if currentCommand = "COMMAND_CAROUSEL_CONFIG":
-                    print(f"{getTimestampString()}Primary Carousel REJECTED the update")
+                    print(f"{getTimestampString()}Primary Carousel REJECTED the config")
                 elif currentCommand = "COMMAND_CAROUSEL_ADD_STREAM":
                     print(f"{getTimestampString()}Primary Carousel REJECTED the added stream")
                 elif currentCommand = "COMMAND_CAROUSEL_START":
@@ -208,7 +220,7 @@ def sendHints(programID, eventID, hintConfigFile):
                 hintMessage = create_hint_message(0,0,eventID,hintCount,payload)
                 #encode the hint message
                 hintMessage = hintMessage.encode('ascii')
-                packet = createPacket("COMMAND_SEND_HINT", hintMessage)
+                packet = createPacket("COMMAND_SEND_HINT", hintMessage, programID)
                 sendMessageTCP(packet)
                 print(f"{getTimestampString()}Sending Hint for Program ID {programID} for Event ID {eventID}")
                 
@@ -247,31 +259,58 @@ def create_hint_message(clock, day, event_Id, count, load):
     
     
         
-def createPacket(command, data):
+def createPacket(command, data, programID):
     """
     A function to create the packet of data to be sent on the socket
     Parameters:
     Command(String): The command 
     Data(String): The data
+    programID(string): The program ID to include
     Returns:
     Packet: The return packet
     """
+    #update the global messageID
+    global messageID
+    messageID += 1
+    
     # Convert command to a single byte
     #command_byte = struct.pack('B', commands.get(command))
-    command_byte = command.to_bytes(2, byteorder='big')
-
-    # Convert data to bytes
-    #data_bytes = data.encode('utf-8')
+    command_byte = command.to_bytes(1, byteorder='big')
+    
     #already encoded
     data_bytes = data
-
+    
+    
+    
+    
+    #content - all 32 bit (4 byte) integers BIG ENDIAN
+    #messageID - increment on each message
+    messageIDBytes = messageID.to_bytes(4, byteorder='big')
+    #channelID - the channel
+    channelIDBytes = channelID.to_bytes(4, byteorder='big')
+    #eventID - all 0
+    eventID = 0
+    eventIDBytes = eventID.to_bytes(4, byteorder='big')
+    #Payload LENGTH
     # Get the length of data after converting to bytes
     data_length = len(data_bytes)
 
     # Convert data length to two bytes
-    data_length_bytes = data_length.to_bytes(1, byteorder='big')
-    #pad with bytes of 00
+    data_length_bytes = data_length.to_bytes(4, byteorder='big')
     
+    
+    #cycle count - not in HINT - 0
+    cycleCount = 0
+    cycleCountBytes = cycleCount.to_bytes(4, byteorder='big')
+    #section count - not in HINT - 0
+    sectionCount = 0
+    sectionCountBytes = sectionCount.to_bytes(4, byteorder='big')
+
+    
+    
+
+    
+    #pad with bytes of 00 to make data 300
     # Calculate the required padding length
     padding_length = 300 - data_length
 
@@ -279,9 +318,32 @@ def createPacket(command, data):
     data_bytes += b'\x00' * padding_length
 
 
-    # Combine all parts of the packet
-    packet = b'\x00\x00' + command_byte + data_length_bytes + data_bytes
+
+    #data length of entire thing
+    #24 for pre-data content
+    #300 for data bytes
+    dataLengthEntirePacket = len(content) + len(data_bytes)
+    dataLengthEntirePacketBytes = dataLengthEntirePacket.to_bytes(2, byteorder='big')
     
+    
+    # Combine all parts of the packet
+    #create content
+    #dont sent certain aspects if sending HINT
+    if(command != "COMMAND_SEND_HINT"):
+        content = messageIDBytes+channelIDBytes+eventIDBytes+data_length_bytes+cycleCountBytes+sectionCountBytes
+    else:
+        content = messageIDBytes+channelIDBytes+eventIDBytes+data_length_bytes
+    #ushort is 2 bytes
+    
+    packet = b'\x00\x00\x00' + command_byte + dataLengthEntirePacketBytes + content + data_bytes
+    
+    
+    
+    #add padding to make packet 406 bytes
+    padding_length = 406 - len(packet)
+
+    # Add padding with bytes of 0x00
+    packet += b'\x00' * padding_length
 
     
     
@@ -324,25 +386,8 @@ def addServices(servicesConfigFile):
             string = f"{scte35_Service_Id},{scte35_PID},{scte35_Rate},{channelName},{channelTag}"
             #convert to bytes
             bytesToSend = string.encode('ascii')
-            packet = createPacket("COMMAND_CAROUSEL_ADD_STREAM", bytesToSend)
-            """
-            #create the packet
-            columns = [scte35_Service_Id, scte35_PID, scte35_Rate, channelName, channelTag]
+            packet = createPacket("COMMAND_CAROUSEL_ADD_STREAM", bytesToSend, channelTag)
 
-            # Convert each integer value to bytes and concatenate them into a byte array
-            byte_array = b''
-            for value in columns:
-                if isinstance(value, int):
-                    byte_array += value.to_bytes(2, 'big')  # Convert integer to a 2 bytes
-                elif isinstance(value, str):
-                    byte_array += value.encode()           # Convert string to bytes
-                else:
-                    # Handle other types of values as needed
-                    pass
-            
-            packet = createPacket("COMMAND_CAROUSEL_ADD_STREAM", byte_array)
-            """
-            
             sendMessageTCP(packet)
             print(f"{getTimestampString()}Adding Stream {channelName} to Primary Carousel")
             
@@ -401,22 +446,7 @@ def startCarousel(programID, eventID):
     string = f"{programID},{eventID}"
     #convert to bytes
     bytesToSend = string.encode('ascii')
-    packet = createPacket("COMMAND_CAROUSEL_START", bytesToSend)
-    """
-    #startMessage = f"0{programID}{eventID}"
-    columns = [programID, eventID]
-    # Convert each integer value to bytes and concatenate them into a byte array
-    byte_array = b''
-    for value in columns:
-        if isinstance(value, int):
-            byte_array += value.to_bytes(2, 'big')  # Convert integer to a 2 bytes
-        elif isinstance(value, str):
-            byte_array += value.encode()           # Convert string to bytes
-        else:
-            # Handle other types of values as needed
-            pass
-    packet = createPacket("COMMAND_CAROUSEL_START", byte_array)
-    """
+    packet = createPacket("COMMAND_CAROUSEL_START", bytesToSend, programID)
     sendMessageTCP(packet)
     print(f"{getTimestampString()}Starting Primary Carousel for Program ID {programID}, Event ID {eventID}")
     
@@ -435,23 +465,7 @@ def stopCarousel(programID, eventID):
     string = f"{programID},{eventID}"
     #convert to bytes
     bytesToSend = string.encode('ascii')
-    packet = createPacket("COMMAND_CAROUSEL_STOP", bytesToSend)
-    """
-    #stopMessage = f"0{programID}{eventID}"
-    #startMessage = f"0{programID}{eventID}"
-    columns = [programID, eventID]
-    # Convert each integer value to bytes and concatenate them into a byte array
-    byte_array = b''
-    for value in columns:
-        if isinstance(value, int):
-            byte_array += value.to_bytes(2, 'big')  # Convert integer to a 2 bytes
-        elif isinstance(value, str):
-            byte_array += value.encode()           # Convert string to bytes
-        else:
-            # Handle other types of values as needed
-            pass
-    """
-    packet = createPacket("COMMAND_CAROUSEL_STOP", byte_array)
+    packet = createPacket("COMMAND_CAROUSEL_STOP", bytesToSend, programID)
     sendMessageTCP(packet)
     print(f"{getTimestampString()}Stopping Primary Carousel for Program ID {programID}, Event ID {eventID}")
     
@@ -495,23 +509,8 @@ def configureCarousel(carouselConfig):
         string = f"{hintIP},{hintPort},{streamSourceIP},{streamSourcePort},{streamDestIP},{streamDestPort},{bitrate},{patRate},{pmtRate},{pmtPort}"
         #convert to bytes
         bytesToSend = string.encode('ascii')
-        packet = createPacket("COMMAND_CAROUSEL_START", bytesToSend)
-        
-        """
-        data = [channelName,channelTag,carouselIP,carouselPort,hintIP,hintPort,streamDestIP,streamDestPort,bitrate,patRate,pmtRate,pmtPID,scte35_Service_Id,scte35_PID,scte35_Rate,streamSourceIP,streamSourcePort,hintDelay]
-        # Convert each integer value to bytes and concatenate them into a byte array
-        byte_array = b''
-        for value in data:
-            if isinstance(value, int):
-                byte_array += value.to_bytes(2, 'big')  # Convert integer to a 2 bytes
-            elif isinstance(value, str):
-                byte_array += value.encode()           # Convert string to bytes
-            else:
-                # Handle other types of values as needed
-                pass
-        packet = createPacket("COMMAND_CAROUSEL_CONFIG", byte_array)
-        """
-        
+        packet = createPacket("COMMAND_CAROUSEL_START", bytesToSend, 0)
+   
         sendMessageTCP(packet)
         print(f"{getTimestampString()}Sending Carousel Config Data")
 
