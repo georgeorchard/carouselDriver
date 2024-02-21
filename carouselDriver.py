@@ -618,10 +618,10 @@ if __name__ == "__main__":
     
     
     #Close Carousel connection
-    """
+    
     print(f"{getTimestampString()}Closing connection to Primary Carousel at {ip}:{port}")
     socket.close()
-    """
+    
     
     
     
