@@ -3,6 +3,7 @@ import sys
 import threading
 import datetime
 import struct
+import time
 
 
 
@@ -13,7 +14,7 @@ currentCommand = ""
 messageID = 0
 
 #global socket variable
-#socket = None
+carouselSocket = None
 lock = threading.Lock()
 
 #Define the commands
@@ -57,7 +58,7 @@ def connectTCP(ip, port):
     encoderSocket (Socket): The socket
     """
     #Create the TCP socket
-    encoderSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    carouselSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     # Get the current time
     timestamp_string = getTimestampString()
     
@@ -66,17 +67,18 @@ def connectTCP(ip, port):
     #Connect to the socket
         
     try:
-        encoderSocket.connect((ip, port))
+        carouselSocket.connect((ip, port))
         print(f"{timestamp_string}Connected to {ip}:{port}")
+        
 
 
     except ConnectionRefusedError:
         print(f"{timestamp_string}Connection was refused. Ensure the server is running or check the IP and port.")
     except Exception as e:
         print(f"An error occurred: {e}")
-
+    
     # Return the socket
-    return encoderSocket
+    return carouselSocket
     
     
 def sendMessageTCP(message):
@@ -89,17 +91,17 @@ def sendMessageTCP(message):
     code(int): The return code
     """
     
-    lock.acquire()
-    global socket
+    #lock.acquire()
+    global carouselSocket
     """
     binaryData = bytes.fromhex(message)
     socket.send(binaryData)
     """
-    socket.send(message)
-    lock.release()
+    carouselSocket.send(message)
+    #lock.release()
     
     
-def listenToSocket(socket):
+def listenToSocket():
     """
     A function to listen on the given socket and react accordingly
     Parameters:
@@ -107,8 +109,12 @@ def listenToSocket(socket):
     Returns:
     None
     """
+    global carouselSocket
+    
+    
     while True:
         try:
+            print("listening")
             """
             # Receive data from the socket
             data = socket.recv(1024)
@@ -117,8 +123,13 @@ def listenToSocket(socket):
             commandValue = int(hex_string[4:6])
             commandName = commands_by_value.get(commandValue)
             """
+           
+            rawData = carouselSocket.recv(450)
+            print(rawData)
             
-            rawData = socket.recv(450)
+            if not rawData:
+                print("no")
+                break
             #remove the TCP header (44 bytes)
             data = rawData[44:]
             
@@ -150,8 +161,7 @@ def listenToSocket(socket):
             
             print(f"{getTimestampString()}Received Message of type {commandName} from Primary Carousel")
             global debugMode
-            if not data:
-                break
+            
             global currentCommand
             #If an ACK is received, respond based on the current command.
             if commandName == "RESPONSE_CAROUSEL_ACK":
@@ -195,15 +205,13 @@ def listenToSocket(socket):
                     print(f"{getTimestampString()}Primary Carousel FAILED to stop")
                 elif currentCommand == "COMMAND_SEND_HINT":
                     print(f"{getTimestampString()}Primary Carousel REJECTED the hint")
-                    
-                
                 
         except Exception as e:
-            print(f"An error occurred: {e}")
-            break
+            print(f"An error occurred in listenToSocket: {e}")    
+            
+        
 
-    # Close the socket when done
-    socket.close()
+    
 
 def sendHints(programID, eventID, hintConfigFile):
     """
@@ -469,8 +477,9 @@ def startCarousel(programID, eventID):
     #convert to bytes
     bytesToSend = string.encode('ascii')
     packet = createPacket("COMMAND_CAROUSEL_START", bytesToSend, programID, eventID)
-    sendMessageTCP(packet)
     print(f"{getTimestampString()}Starting Primary Carousel for Program ID {programID}, Event ID {eventID}")
+    sendMessageTCP(packet)
+    
     
     
     
@@ -492,8 +501,9 @@ def stopCarousel(programID, eventID):
     #convert to bytes
     bytesToSend = string.encode('ascii')
     packet = createPacket("COMMAND_CAROUSEL_STOP", bytesToSend, programID, eventID)
-    sendMessageTCP(packet)
     print(f"{getTimestampString()}Stopping Primary Carousel for Program ID {programID}, Event ID {eventID}")
+
+    sendMessageTCP(packet)
     
 
 def configureCarousel(carouselConfig):
@@ -535,7 +545,7 @@ def configureCarousel(carouselConfig):
                 string = f"{hintIP},{hintPort},{streamSourceIP},{streamSourcePort},{streamDestIP},{streamDestPort},{bitrate},{patRate},{pmtRate},{pmtPID}"
                 #convert to bytes
                 bytesToSend = string.encode('ascii')
-                packet = createPacket("COMMAND_CAROUSEL_START", bytesToSend, 0, 0)
+                packet = createPacket("COMMAND_CAROUSEL_CONFIG", bytesToSend, 0, 0)
            
                 sendMessageTCP(packet)
                 print(f"{getTimestampString()}Sending Carousel Config Data")
@@ -572,9 +582,10 @@ if __name__ == "__main__":
         
             
     print(f"{getTimestampString()}Connecting to Primary Carousel at {ip}:{port}")
-    socket = connectTCP(ip, port)
+    #global carouselSocket
+    carouselSocket = connectTCP(ip, port)
     #start receiving data from the carousel
-    receiveThread = threading.Thread(target=listenToSocket, args=(socket,))
+    receiveThread = threading.Thread(target=listenToSocket)
     receiveThread.daemon = True
     receiveThread.start()
     
@@ -591,8 +602,10 @@ if __name__ == "__main__":
     
     
     #Close Carousel connection
+    """
     print(f"{getTimestampString()}Closing connection to Primary Carousel at {ip}:{port}")
     socket.close()
+    """
     
     
     
