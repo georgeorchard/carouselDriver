@@ -222,12 +222,12 @@ def sendHints(programID, eventID, hintConfigFile):
         for line in file:
             # Split the line by comma (assuming it's a CSV file)
             columns = line.strip().split(',')
-            programIDFile = columns[0]
-            eventIDFile = columns[1]
+            programIDFile = int(columns[0])
+            eventIDFile = int(columns[1])
 
             #check we have the correct hint set
             if(programIDFile == programID and eventIDFile == eventID):
-                hintCount = columns[2]
+                hintCount = int(columns[2])
                 payload = columns[3]
                 
                 hintMessage = create_hint_message(0,0,eventID,hintCount,payload)
@@ -393,11 +393,11 @@ def addServices(servicesConfigFile):
             if (len(columns) != 5):
                 print(f"{getTimestampString()}Carousel Config File Error: Carousel Data Insufficient")
                 break
-            scte35_Service_Id = columns[0]
-            scte35_PID = columns[1]
-            scte35_Rate = columns[2]
+            scte35_Service_Id = int(columns[0])
+            scte35_PID = int(columns[1])
+            scte35_Rate = int(columns[2])
             channelName = columns[3]
-            channelTag = columns[4]
+            channelTag = int(columns[4])
             #create the string
             string = f"{scte35_Service_Id},{scte35_PID},{scte35_Rate},{channelName},{channelTag}"
             #convert to bytes
@@ -517,18 +517,18 @@ def configureCarousel(carouselConfig):
                 print(f"{getTimestampString()}Carousel Config File Error: Carousel Data Insufficient")
             else:   
                 carouselIP = columns[0]
-                carouselPort = columns[1]
+                carouselPort = int(columns[1])
                 hintIP = columns[2]
-                hintPort = columns[3]
+                hintPort = int(columns[3])
                 streamDestIP = columns[4]
-                streamDestPort = columns[5]
-                bitrate = columns[6]  
-                patRate = columns[7]
-                pmtRate = columns[8]
-                pmtPID = columns[9]
+                streamDestPort = int(columns[5])
+                bitrate = int(columns[6])  
+                patRate = int(columns[7])
+                pmtRate = int(columns[8])
+                pmtPID = int(columns[9])
                 streamSourceIP = columns[10]
-                streamSourcePort = columns[11]
-                hintDelay = columns[12]
+                streamSourcePort = int(columns[11])
+                hintDelay = int(columns[12])
                 
                 
                 #create the string
