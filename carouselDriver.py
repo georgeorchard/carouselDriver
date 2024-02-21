@@ -97,7 +97,9 @@ def sendMessageTCP(message):
     binaryData = bytes.fromhex(message)
     socket.send(binaryData)
     """
+    print(''.join([hex(byte)[2:].zfill(2) for byte in message]))
     carouselSocket.send(message)
+    listenToSocket()
     #lock.release()
     
     
@@ -110,104 +112,109 @@ def listenToSocket():
     None
     """
     global carouselSocket
+     # Set socket timeout to 1 second
     
     
-    while True:
-        try:
-            print("listening")
-            """
-            # Receive data from the socket
-            data = socket.recv(1024)
-            hex_string = ''.join([hex(byte)[2:].zfill(2) for byte in data])
-            #output what the command is
-            commandValue = int(hex_string[4:6])
-            commandName = commands_by_value.get(commandValue)
-            """
-           
-            rawData = carouselSocket.recv(450)
-            print(rawData)
-            
-            if not rawData:
-                print("no")
-                break
-            #remove the TCP header (44 bytes)
-            data = rawData[44:]
-            
-            #split the information
-            hex_string = ''.join([hex(byte)[2:].zfill(2) for byte in data])
-            
-            #get the command
-            commandValue = int(hex_string[4:8], 16)
-            commandName = commands_by_value.get(commandValue)
-            
-            #take away the information (6 bytes)
-            data = data[6:]
-            hex_string = ''.join([hex(byte)[2:].zfill(2) for byte in data])
+    
+    try:
+        carouselSocket.settimeout(1)
+        
+      
+        """
+        # Receive data from the socket
+        data = socket.recv(1024)
+        hex_string = ''.join([hex(byte)[2:].zfill(2) for byte in data])
+        #output what the command is
+        commandValue = int(hex_string[4:6])
+        commandName = commands_by_value.get(commandValue)
+        """
+       
+        rawData = carouselSocket.recv(406)
+        #print(''.join([hex(byte)[2:].zfill(2) for byte in rawData]))
+        
+        """
+        #remove the TCP header (44 bytes)
+        data = rawData[44:]
+        """
+        data = rawData
+        
+        #split the information
+        hex_string = ''.join([hex(byte)[2:].zfill(2) for byte in data])
+        
+        #get the command
+        commandValue = int(hex_string[4:8], 16)
+        commandName = commands_by_value.get(commandValue)
+        
+        #take away the information (6 bytes)
+        data = data[6:]
+        hex_string = ''.join([hex(byte)[2:].zfill(2) for byte in data])
 
-            #get the data length (4 byte big endian structure at byte 13,14,15,16 (index 12,13,14,15))
-            dataLength = int(hex_string[24:32], 16)
+        #get the data length (4 byte big endian structure at byte 13,14,15,16 (index 12,13,14,15))
+        dataLength = int(hex_string[24:32], 16)
+        
+        
+        #decode the actual data
+        # Extract data after the 12th byte (excluding the 12th byte)
+        #up to the data length 12 bytes to 12 + data length
+        if (dataLength != 0):
+            dataTrimmed = data[12:(12+dataLength)]
             
-            
-            #decode the actual data
-            # Extract data after the 12th byte (excluding the 12th byte)
-            #up to the data length 12 bytes to 12 + data length
-            if (dataLength != 0):
-                dataTrimmed = data[12:(12+dataLength)]
+            decodedString = dataTrimmed.decode('ascii')
+            seperatedString = decodedString.split(',')
+        
+        
+        
+        print(f"{getTimestampString()}Received Message of type {commandName} from Primary Carousel")
+        global debugMode
+        
+        global currentCommand
+        #If an ACK is received, respond based on the current command.
+        if commandName == "RESPONSE_CAROUSEL_ACK":
+            if currentCommand == "COMMAND_CAROUSEL_CONFIG":
+                print(f"{getTimestampString()}Primary Carousel ACCEPTED the config")
+            elif currentCommand == "COMMAND_CAROUSEL_ADD_STREAM":
+                print(f"{getTimestampString()}Primary Carousel ACCEPTED the added stream")
+            elif currentCommand == "COMMAND_CAROUSEL_START":
+                print(f"{getTimestampString()}Primary Carousel STARTED")
+            elif currentCommand =="COMMAND_CAROUSEL_STOP":
+                #print the cycle count - bytes 17,18,19,20 
+                cycleCount = int(hex_string[32:40], 16)
+                print(f"{getTimestampString()}Primary Carousel STOPPED, cycle count {cycleCount}")
                 
-                decodedString = dataTrimmed.decode('ascii')
-                seperatedString = decodedString.split(',')
-            
-            
-            
-            print(f"{getTimestampString()}Received Message of type {commandName} from Primary Carousel")
-            global debugMode
-            
-            global currentCommand
-            #If an ACK is received, respond based on the current command.
-            if commandName == "RESPONSE_CAROUSEL_ACK":
-                if currentCommand == "COMMAND_CAROUSEL_CONFIG":
-                    print(f"{getTimestampString()}Primary Carousel ACCEPTED the config")
-                elif currentCommand == "COMMAND_CAROUSEL_ADD_STREAM":
-                    print(f"{getTimestampString()}Primary Carousel ACCEPTED the added stream")
-                elif currentCommand == "COMMAND_CAROUSEL_START":
-                    print(f"{getTimestampString()}Primary Carousel STARTED")
-                elif currentCommand =="COMMAND_CAROUSEL_STOP":
-                    #print the cycle count - bytes 17,18,19,20 
-                    cycleCount = int(hex_string[32:40], 16)
-                    print(f"{getTimestampString()}Primary Carousel STOPPED, cycle count {cycleCount}")
-                    
-                    
-                elif currentCommand == "COMMAND_SEND_HINT":
-                    """
-                    #get hint data
-                    programID = int(seperatedString[0])
-                    eventID = int(seperatedString[1])
-                    """
-                    #get data about the hint
-                    #programID is the second 4 byte set in the content
-                    #eventID is the third 4 byte set in the content
-                    programID = int(hex_string[8:16])
-                    eventID = int(hex_string[16:24])
-                    
-                    print(f"{getTimestampString()}Primary Carousel ACCEPTED the hint for program ID {programID}, event ID {eventID}")
-                    
-                    
-                    startCarousel(programID, eventID)
-                    
-            if commandName == "RESPONSE_CAROUSEL_ERR":
-                if currentCommand == "COMMAND_CAROUSEL_CONFIG":
-                    print(f"{getTimestampString()}Primary Carousel REJECTED the config")
-                elif currentCommand == "COMMAND_CAROUSEL_ADD_STREAM":
-                    print(f"{getTimestampString()}Primary Carousel REJECTED the added stream")
-                elif currentCommand == "COMMAND_CAROUSEL_START":
-                    print(f"{getTimestampString()}Primary Carousel FAILED to start")
-                elif currentCommand == "COMMAND_CAROUSEL_STOP":
-                    print(f"{getTimestampString()}Primary Carousel FAILED to stop")
-                elif currentCommand == "COMMAND_SEND_HINT":
-                    print(f"{getTimestampString()}Primary Carousel REJECTED the hint")
                 
-        except Exception as e:
-            print(f"An error occurred in listenToSocket: {e}")    
+            elif currentCommand == "COMMAND_SEND_HINT":
+                """
+                #get hint data
+                programID = int(seperatedString[0])
+                eventID = int(seperatedString[1])
+                """
+                #get data about the hint
+                #programID is the second 4 byte set in the content
+                #eventID is the third 4 byte set in the content
+                programID = int(hex_string[8:16])
+                eventID = int(hex_string[16:24])
+                
+                print(f"{getTimestampString()}Primary Carousel ACCEPTED the hint for program ID {programID}, event ID {eventID}")
+                
+                
+                startCarousel(programID, eventID)
+                
+        if commandName == "RESPONSE_CAROUSEL_ERR":
+            if currentCommand == "COMMAND_CAROUSEL_CONFIG":
+                print(f"{getTimestampString()}Primary Carousel REJECTED the config")
+            elif currentCommand == "COMMAND_CAROUSEL_ADD_STREAM":
+                print(f"{getTimestampString()}Primary Carousel REJECTED the added stream")
+            elif currentCommand == "COMMAND_CAROUSEL_START":
+                print(f"{getTimestampString()}Primary Carousel FAILED to start")
+            elif currentCommand == "COMMAND_CAROUSEL_STOP":
+                print(f"{getTimestampString()}Primary Carousel FAILED to stop")
+            elif currentCommand == "COMMAND_SEND_HINT":
+                print(f"{getTimestampString()}Primary Carousel REJECTED the hint")
+            
+    except socket.timeout:
+        print(f"{getTimestampString()}No data received within timeout period")
+    except Exception as e:
+        print(f"An error occurred in listenToSocket: {e}")
             
         
 
@@ -242,8 +249,9 @@ def sendHints(programID, eventID, hintConfigFile):
                 #encode the hint message
                 hintMessage = hintMessage.encode('ascii')
                 packet = createPacket("COMMAND_SEND_HINT", hintMessage, programID, eventID)
+                print(f"\n{getTimestampString()}Sending Hint for Program ID {programID} for Event ID {eventID}")
                 sendMessageTCP(packet)
-                print(f"{getTimestampString()}Sending Hint for Program ID {programID} for Event ID {eventID}")
+                
                 
                 
             else:
@@ -411,9 +419,9 @@ def addServices(servicesConfigFile):
             #convert to bytes
             bytesToSend = string.encode('ascii')
             packet = createPacket("COMMAND_CAROUSEL_ADD_STREAM", bytesToSend, channelTag, 0)
-
+            print(f"\n{getTimestampString()}Adding Stream {channelName} to Primary Carousel")
             sendMessageTCP(packet)
-            print(f"{getTimestampString()}Adding Stream {channelName} to Primary Carousel")
+            
             
  
 def parseEvents(eventsScheduleFile):
@@ -477,7 +485,7 @@ def startCarousel(programID, eventID):
     #convert to bytes
     bytesToSend = string.encode('ascii')
     packet = createPacket("COMMAND_CAROUSEL_START", bytesToSend, programID, eventID)
-    print(f"{getTimestampString()}Starting Primary Carousel for Program ID {programID}, Event ID {eventID}")
+    print(f"\n{getTimestampString()}Starting Primary Carousel for Program ID {programID}, Event ID {eventID}")
     sendMessageTCP(packet)
     
     
@@ -501,7 +509,7 @@ def stopCarousel(programID, eventID):
     #convert to bytes
     bytesToSend = string.encode('ascii')
     packet = createPacket("COMMAND_CAROUSEL_STOP", bytesToSend, programID, eventID)
-    print(f"{getTimestampString()}Stopping Primary Carousel for Program ID {programID}, Event ID {eventID}")
+    print(f"\n{getTimestampString()}Stopping Primary Carousel for Program ID {programID}, Event ID {eventID}")
 
     sendMessageTCP(packet)
     
@@ -546,9 +554,9 @@ def configureCarousel(carouselConfig):
                 #convert to bytes
                 bytesToSend = string.encode('ascii')
                 packet = createPacket("COMMAND_CAROUSEL_CONFIG", bytesToSend, 0, 0)
-           
+                print(f"\n{getTimestampString()}Sending Carousel Config Data")
                 sendMessageTCP(packet)
-                print(f"{getTimestampString()}Sending Carousel Config Data")
+                
 
             
 
@@ -585,9 +593,11 @@ if __name__ == "__main__":
     #global carouselSocket
     carouselSocket = connectTCP(ip, port)
     #start receiving data from the carousel
+    """
     receiveThread = threading.Thread(target=listenToSocket)
     receiveThread.daemon = True
     receiveThread.start()
+    """
     
     #send config message from TM to Carousel
     #NEED NEW VERSION OF CAROUSEL CODE.
