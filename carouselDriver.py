@@ -12,6 +12,10 @@ currentCommand = ""
 #global message ID
 messageID = 0
 
+#global socket variable
+#socket = None
+lock = threading.Lock()
+
 #Define the commands
 commands = {
     "COMMAND_CAROUSEL_CONFIG": 87,
@@ -63,11 +67,11 @@ def connectTCP(ip, port):
         
     try:
         encoderSocket.connect((ip, port))
-        print(f"[{timestamp_string}] Connected to {ip}:{port}")
+        print(f"{timestamp_string}Connected to {ip}:{port}")
 
 
     except ConnectionRefusedError:
-        print(f"[{timestamp_string}] Connection was refused. Ensure the server is running or check the IP and port.")
+        print(f"{timestamp_string}Connection was refused. Ensure the server is running or check the IP and port.")
     except Exception as e:
         print(f"An error occurred: {e}")
 
@@ -75,7 +79,7 @@ def connectTCP(ip, port):
     return encoderSocket
     
     
-def sendMessageTCP(socket, message):
+def sendMessageTCP(message):
     """
     A function to send a message on a given socket
     Parameters:
@@ -84,9 +88,14 @@ def sendMessageTCP(socket, message):
     Returns:
     code(int): The return code
     """
+    
     lock.acquire()
+    global socket
+    """
     binaryData = bytes.fromhex(message)
     socket.send(binaryData)
+    """
+    socket.send(message)
     lock.release()
     
     
@@ -146,19 +155,19 @@ def listenToSocket(socket):
             global currentCommand
             #If an ACK is received, respond based on the current command.
             if commandName == "RESPONSE_CAROUSEL_ACK":
-                if currentCommand = "COMMAND_CAROUSEL_CONFIG":
+                if currentCommand == "COMMAND_CAROUSEL_CONFIG":
                     print(f"{getTimestampString()}Primary Carousel ACCEPTED the config")
-                elif currentCommand = "COMMAND_CAROUSEL_ADD_STREAM":
+                elif currentCommand == "COMMAND_CAROUSEL_ADD_STREAM":
                     print(f"{getTimestampString()}Primary Carousel ACCEPTED the added stream")
-                elif currentCommand = "COMMAND_CAROUSEL_START":
+                elif currentCommand == "COMMAND_CAROUSEL_START":
                     print(f"{getTimestampString()}Primary Carousel STARTED")
-                elif currentCommand = "COMMAND_CAROUSEL_STOP":
+                elif currentCommand =="COMMAND_CAROUSEL_STOP":
                     #print the cycle count - bytes 17,18,19,20 
                     cycleCount = int(hex_string[32:40], 16)
                     print(f"{getTimestampString()}Primary Carousel STOPPED, cycle count {cycleCount}")
                     
                     
-                elif currentCommand = "COMMAND_SEND_HINT":
+                elif currentCommand == "COMMAND_SEND_HINT":
                     """
                     #get hint data
                     programID = int(seperatedString[0])
@@ -168,7 +177,7 @@ def listenToSocket(socket):
                     #programID is the second 4 byte set in the content
                     #eventID is the third 4 byte set in the content
                     programID = int(hex_string[8:16])
-                    eventID = int([16:24])
+                    eventID = int(hex_string[16:24])
                     
                     print(f"{getTimestampString()}Primary Carousel ACCEPTED the hint for program ID {programID}, event ID {eventID}")
                     
@@ -176,15 +185,15 @@ def listenToSocket(socket):
                     startCarousel(programID, eventID)
                     
             if commandName == "RESPONSE_CAROUSEL_ERR":
-                if currentCommand = "COMMAND_CAROUSEL_CONFIG":
+                if currentCommand == "COMMAND_CAROUSEL_CONFIG":
                     print(f"{getTimestampString()}Primary Carousel REJECTED the config")
-                elif currentCommand = "COMMAND_CAROUSEL_ADD_STREAM":
+                elif currentCommand == "COMMAND_CAROUSEL_ADD_STREAM":
                     print(f"{getTimestampString()}Primary Carousel REJECTED the added stream")
-                elif currentCommand = "COMMAND_CAROUSEL_START":
+                elif currentCommand == "COMMAND_CAROUSEL_START":
                     print(f"{getTimestampString()}Primary Carousel FAILED to start")
-                elif currentCommand = "COMMAND_CAROUSEL_STOP":
+                elif currentCommand == "COMMAND_CAROUSEL_STOP":
                     print(f"{getTimestampString()}Primary Carousel FAILED to stop")
-                elif currentCommand = "COMMAND_SEND_HINT":
+                elif currentCommand == "COMMAND_SEND_HINT":
                     print(f"{getTimestampString()}Primary Carousel REJECTED the hint")
                     
                 
@@ -279,6 +288,7 @@ def createPacket(command, data, programID, eventID):
     
     # Convert command to a single byte
     #command_byte = struct.pack('B', commands.get(command))
+    command = commands.get(command)
     command_byte = command.to_bytes(1, byteorder='big')
     
     #already encoded
@@ -323,11 +333,7 @@ def createPacket(command, data, programID, eventID):
 
 
 
-    #data length of entire thing
-    #24 for pre-data content
-    #300 for data bytes
-    dataLengthEntirePacket = len(content) + len(data_bytes)
-    dataLengthEntirePacketBytes = dataLengthEntirePacket.to_bytes(2, byteorder='big')
+    
     
     
     # Combine all parts of the packet
@@ -338,6 +344,12 @@ def createPacket(command, data, programID, eventID):
     else:
         content = messageIDBytes+channelIDBytes+eventIDBytes+data_length_bytes
     #ushort is 2 bytes
+    
+    #data length of entire thing
+    #24 for pre-data content
+    #300 for data bytes
+    dataLengthEntirePacket = len(content) + len(data_bytes)
+    dataLengthEntirePacketBytes = dataLengthEntirePacket.to_bytes(2, byteorder='big')
     
     packet = b'\x00\x00\x00' + command_byte + dataLengthEntirePacketBytes + content + data_bytes
     
@@ -499,34 +511,34 @@ def configureCarousel(carouselConfig):
         #if empty
         if not line:
             print(f"{getTimestampString()}Carousel Config File Error: No Carousel Data")
-            break
-        columns = line.strip().split(',')
-        if (len(columns) != 13):
-            print(f"{getTimestampString()}Carousel Config File Error: Carousel Data Insufficient")
-            break
-        carouselIP = columns[0]
-        carouselPort = columns[1]
-        hintIP = columns[2]
-        hintPort = columns[3]
-        streamDestIP = columns[4]
-        streamDestPort = columns[5]
-        bitrate = columns[6]  
-        patRate = columns[7]
-        pmtRate = columns[8]
-        pmtPID = columns[9]
-        streamSourceIP = columns[10]
-        streamSourcePort = columns[11]
-        hintDelay = columns[12]
-        
-        
-        #create the string
-        string = f"{hintIP},{hintPort},{streamSourceIP},{streamSourcePort},{streamDestIP},{streamDestPort},{bitrate},{patRate},{pmtRate},{pmtPort}"
-        #convert to bytes
-        bytesToSend = string.encode('ascii')
-        packet = createPacket("COMMAND_CAROUSEL_START", bytesToSend, 0, 0)
-   
-        sendMessageTCP(packet)
-        print(f"{getTimestampString()}Sending Carousel Config Data")
+        else:   
+            columns = line.strip().split(',')
+            if (len(columns) != 13):
+                print(f"{getTimestampString()}Carousel Config File Error: Carousel Data Insufficient")
+            else:   
+                carouselIP = columns[0]
+                carouselPort = columns[1]
+                hintIP = columns[2]
+                hintPort = columns[3]
+                streamDestIP = columns[4]
+                streamDestPort = columns[5]
+                bitrate = columns[6]  
+                patRate = columns[7]
+                pmtRate = columns[8]
+                pmtPID = columns[9]
+                streamSourceIP = columns[10]
+                streamSourcePort = columns[11]
+                hintDelay = columns[12]
+                
+                
+                #create the string
+                string = f"{hintIP},{hintPort},{streamSourceIP},{streamSourcePort},{streamDestIP},{streamDestPort},{bitrate},{patRate},{pmtRate},{pmtPID}"
+                #convert to bytes
+                bytesToSend = string.encode('ascii')
+                packet = createPacket("COMMAND_CAROUSEL_START", bytesToSend, 0, 0)
+           
+                sendMessageTCP(packet)
+                print(f"{getTimestampString()}Sending Carousel Config Data")
 
             
 
@@ -534,7 +546,7 @@ def configureCarousel(carouselConfig):
 if __name__ == "__main__":
 
     #Global value for program version
-    programVersion = 1.0.0
+    programVersion = "1.0.0"
     print(f"Encoder Driver Version: {programVersion}")
     
     #set file names
@@ -552,11 +564,13 @@ if __name__ == "__main__":
         # Skip the first line (headers)
         next(file)
         # Read each line of the CSV file
-        for line in file:
-            # Split the line by comma (assuming it's a CSV file)
-            columns = line.strip().split(',')
-            ip = columns[0]
-            port = columns[1]
+        line = next(file)
+        # Split the line by comma (assuming it's a CSV file)
+        columns = line.strip().split(',')
+        ip = columns[0]
+        port = int(columns[1])
+        
+            
     print(f"{getTimestampString()}Connecting to Primary Carousel at {ip}:{port}")
     socket = connectTCP(ip, port)
     #start receiving data from the carousel
