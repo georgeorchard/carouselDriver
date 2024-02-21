@@ -159,15 +159,19 @@ def listenToSocket(socket):
                     
                     
                 elif currentCommand = "COMMAND_SEND_HINT":
+                    """
                     #get hint data
                     programID = int(seperatedString[0])
                     eventID = int(seperatedString[1])
-                    print(f"{getTimestampString()}Primary Carousel ACCEPTED the hint for program ID {programID}, hint ID {hintID}")
+                    """
                     #get data about the hint
-                    """
-                    programID = int(hex_string[8:10])
-                    eventID = int([10:12])
-                    """
+                    #programID is the second 4 byte set in the content
+                    #eventID is the third 4 byte set in the content
+                    programID = int(hex_string[8:16])
+                    eventID = int([16:24])
+                    
+                    print(f"{getTimestampString()}Primary Carousel ACCEPTED the hint for program ID {programID}, event ID {eventID}")
+                    
                     
                     startCarousel(programID, eventID)
                     
@@ -220,7 +224,7 @@ def sendHints(programID, eventID, hintConfigFile):
                 hintMessage = create_hint_message(0,0,eventID,hintCount,payload)
                 #encode the hint message
                 hintMessage = hintMessage.encode('ascii')
-                packet = createPacket("COMMAND_SEND_HINT", hintMessage, programID)
+                packet = createPacket("COMMAND_SEND_HINT", hintMessage, programID, eventID)
                 sendMessageTCP(packet)
                 print(f"{getTimestampString()}Sending Hint for Program ID {programID} for Event ID {eventID}")
                 
@@ -259,7 +263,7 @@ def create_hint_message(clock, day, event_Id, count, load):
     
     
         
-def createPacket(command, data, programID):
+def createPacket(command, data, programID, eventID):
     """
     A function to create the packet of data to be sent on the socket
     Parameters:
@@ -287,9 +291,9 @@ def createPacket(command, data, programID):
     #messageID - increment on each message
     messageIDBytes = messageID.to_bytes(4, byteorder='big')
     #channelID - the channel
-    channelIDBytes = channelID.to_bytes(4, byteorder='big')
-    #eventID - all 0
-    eventID = 0
+    channelIDBytes = programID.to_bytes(4, byteorder='big')
+    #eventID - all 0 apart from start carousel and CHECK HINTS
+    
     eventIDBytes = eventID.to_bytes(4, byteorder='big')
     #Payload LENGTH
     # Get the length of data after converting to bytes
@@ -386,7 +390,7 @@ def addServices(servicesConfigFile):
             string = f"{scte35_Service_Id},{scte35_PID},{scte35_Rate},{channelName},{channelTag}"
             #convert to bytes
             bytesToSend = string.encode('ascii')
-            packet = createPacket("COMMAND_CAROUSEL_ADD_STREAM", bytesToSend, channelTag)
+            packet = createPacket("COMMAND_CAROUSEL_ADD_STREAM", bytesToSend, channelTag, 0)
 
             sendMessageTCP(packet)
             print(f"{getTimestampString()}Adding Stream {channelName} to Primary Carousel")
@@ -408,21 +412,21 @@ def parseEvents(eventsScheduleFile):
         for line in file:
             # Split the line by comma (assuming it's a CSV file)
             columns = line.strip().split(',')
-            programID = columns[0]
-            eventID = columns[1]
+            programID = int(columns[0])
+            eventID = int(columns[1])
             time = columns[2]
             
             timeSplit = time.strip().split(':')
-            hours = timeSplit[0]
-            mins = timeSplit[1]
-            secs = timeSplit[2]
+            hours = int(timeSplit[0])
+            mins = int(timeSplit[1])
+            secs = int(timeSplit[2])
             #get current time
             currentTime = datetime.datetime.now()
             formattedTime = currentTime.strftime("%H:%M:%S")
             formattedTimeSplit = formattedTime.split(':')
-            currentHours = formattedTimeSplit[0]
-            currentMins = formattedTimeSplit[1]
-            currentSecs = formattedTimeSplit[2]
+            currentHours = int(formattedTimeSplit[0])
+            currentMins = int(formattedTimeSplit[1])
+            currentSecs = int(formattedTimeSplit[2])
             #work out the time to the event, take away the 10 seconds to allow for the time the message would be sent beforehand.
             timeToEvent = ((hours*3600 + mins*60 + secs) - (currentHours*3600 + currentMins*60 + currentSecs)) - 10
             if(timeToEvent > 0):
@@ -433,6 +437,8 @@ def parseEvents(eventsScheduleFile):
                 time.sleep(10)
                 stopCarousel(programID, eventID)
 
+
+
 def startCarousel(programID, eventID):
     """
     Function to start the carousel
@@ -442,11 +448,15 @@ def startCarousel(programID, eventID):
     Returns:
     None
     """
+    #String empty as data is in messsage content
+    string = f""
+    """
     #create the string
     string = f"{programID},{eventID}"
+    """
     #convert to bytes
     bytesToSend = string.encode('ascii')
-    packet = createPacket("COMMAND_CAROUSEL_START", bytesToSend, programID)
+    packet = createPacket("COMMAND_CAROUSEL_START", bytesToSend, programID, eventID)
     sendMessageTCP(packet)
     print(f"{getTimestampString()}Starting Primary Carousel for Program ID {programID}, Event ID {eventID}")
     
@@ -461,11 +471,15 @@ def stopCarousel(programID, eventID):
     Returns:
     None
     """
+    #String empty as data is in messsage content
+    string = f""
+    """
     #create the string
     string = f"{programID},{eventID}"
+    """
     #convert to bytes
     bytesToSend = string.encode('ascii')
-    packet = createPacket("COMMAND_CAROUSEL_STOP", bytesToSend, programID)
+    packet = createPacket("COMMAND_CAROUSEL_STOP", bytesToSend, programID, eventID)
     sendMessageTCP(packet)
     print(f"{getTimestampString()}Stopping Primary Carousel for Program ID {programID}, Event ID {eventID}")
     
@@ -509,7 +523,7 @@ def configureCarousel(carouselConfig):
         string = f"{hintIP},{hintPort},{streamSourceIP},{streamSourcePort},{streamDestIP},{streamDestPort},{bitrate},{patRate},{pmtRate},{pmtPort}"
         #convert to bytes
         bytesToSend = string.encode('ascii')
-        packet = createPacket("COMMAND_CAROUSEL_START", bytesToSend, 0)
+        packet = createPacket("COMMAND_CAROUSEL_START", bytesToSend, 0, 0)
    
         sendMessageTCP(packet)
         print(f"{getTimestampString()}Sending Carousel Config Data")
