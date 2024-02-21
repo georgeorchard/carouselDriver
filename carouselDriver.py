@@ -97,7 +97,7 @@ def sendMessageTCP(message):
     binaryData = bytes.fromhex(message)
     socket.send(binaryData)
     """
-    print(''.join([hex(byte)[2:].zfill(2) for byte in message]))
+    #print(''.join([hex(byte)[2:].zfill(2) for byte in message]))
     carouselSocket.send(message)
     listenToSocket()
     #lock.release()
@@ -230,7 +230,7 @@ def sendHints(programID, eventID, hintConfigFile):
     Returns:
     None
     """
-    with open('hintsConfig.csv', 'r') as file:
+    with open(hintConfigFile, 'r') as file:
         # Skip the first line (headers)
         next(file)
         # Read each line of the CSV file
@@ -249,7 +249,7 @@ def sendHints(programID, eventID, hintConfigFile):
                 #encode the hint message
                 hintMessage = hintMessage.encode('ascii')
                 packet = createPacket("COMMAND_SEND_HINT", hintMessage, programID, eventID)
-                print(f"\n{getTimestampString()}Sending Hint for Program ID {programID} for Event ID {eventID}")
+                print(f"{getTimestampString()}Sending Hint for Program ID {programID}, Event ID {eventID}")
                 sendMessageTCP(packet)
                 
                 
@@ -276,13 +276,13 @@ def create_hint_message(clock, day, event_Id, count, load):
     #get the length of the data in bytes
     length = len(load)
     payload = bytearray(length)
-
+    """
     if length > 0:
         payload[:length] = load[:length]
-
-    hint_message = f"{clock},{day},{event_Id},{count},{length},{payload}"
     
-
+    hint_message = f"{clock},{day},{event_Id},{count},{length},{payload}"
+    """
+    hint_message = f"{clock},{day},{event_Id},{count},{length},{load}"
     return hint_message       
     
     
@@ -315,26 +315,31 @@ def createPacket(command, data, programID, eventID):
     
     #content - all 32 bit (4 byte) integers BIG ENDIAN
     #messageID - increment on each message
-    messageIDBytes = messageID.to_bytes(4, byteorder='big')
+    #messageIDBytes = messageID.to_bytes(4, byteorder='big')
+    messageIDBytes = messageID.to_bytes(4, byteorder='little')
     #channelID - the channel
-    channelIDBytes = programID.to_bytes(4, byteorder='big')
+    #channelIDBytes = programID.to_bytes(4, byteorder='big')
+    channelIDBytes = programID.to_bytes(4, byteorder='little')
     #eventID - all 0 apart from start carousel and CHECK HINTS
-    
-    eventIDBytes = eventID.to_bytes(4, byteorder='big')
+    #eventIDBytes = eventID.to_bytes(4, byteorder='big')
+    eventIDBytes = eventID.to_bytes(4, byteorder='little')
     #Payload LENGTH
     # Get the length of data after converting to bytes
     data_length = len(data_bytes)
 
     # Convert data length to two bytes
-    data_length_bytes = data_length.to_bytes(4, byteorder='big')
+    #data_length_bytes = data_length.to_bytes(4, byteorder='big')
+    data_length_bytes = data_length.to_bytes(4, byteorder='little')
     
     
     #cycle count - not in HINT - 0
     cycleCount = 0
-    cycleCountBytes = cycleCount.to_bytes(4, byteorder='big')
+    #cycleCountBytes = cycleCount.to_bytes(4, byteorder='big')
+    cycleCountBytes = cycleCount.to_bytes(4, byteorder='little')
     #section count - not in HINT - 0
     sectionCount = 0
-    sectionCountBytes = sectionCount.to_bytes(4, byteorder='big')
+    #sectionCountBytes = sectionCount.to_bytes(4, byteorder='big')
+    sectionCountBytes = sectionCount.to_bytes(4, byteorder='little')
 
     
     
@@ -365,7 +370,8 @@ def createPacket(command, data, programID, eventID):
     #24 for pre-data content
     #300 for data bytes
     dataLengthEntirePacket = len(content) + len(data_bytes)
-    dataLengthEntirePacketBytes = dataLengthEntirePacket.to_bytes(2, byteorder='big')
+    #dataLengthEntirePacketBytes = dataLengthEntirePacket.to_bytes(2, byteorder='big')
+    dataLengthEntirePacketBytes = dataLengthEntirePacket.to_bytes(2, byteorder='little')
     
     packet = b'\x00\x00\x00' + command_byte + dataLengthEntirePacketBytes + content + data_bytes
     
@@ -442,9 +448,9 @@ def parseEvents(eventsScheduleFile):
             columns = line.strip().split(',')
             programID = int(columns[0])
             eventID = int(columns[1])
-            time = columns[2]
+            fileTime = columns[2]
             
-            timeSplit = time.strip().split(':')
+            timeSplit = fileTime.strip().split(':')
             hours = int(timeSplit[0])
             mins = int(timeSplit[1])
             secs = int(timeSplit[2])
@@ -456,10 +462,10 @@ def parseEvents(eventsScheduleFile):
             currentMins = int(formattedTimeSplit[1])
             currentSecs = int(formattedTimeSplit[2])
             #work out the time to the event, take away the 10 seconds to allow for the time the message would be sent beforehand.
-            timeToEvent = ((hours*3600 + mins*60 + secs) - (currentHours*3600 + currentMins*60 + currentSecs)) - 10
+            timeToEvent = int(((hours*3600 + mins*60 + secs) - (currentHours*3600 + currentMins*60 + currentSecs)) - 10)
             if(timeToEvent > 0):
                 time.sleep(timeToEvent)
-                print(f"{getTimestampString()}Processing Hints for Program ID {programID}, Event ID {eventID}")
+                print(f"\n{getTimestampString()}Processing Hints for Program ID {programID}, Event ID {eventID}")
                 sendHints(programID, eventID, hintConfigFile)
                 #stop the carousel after the event time.
                 time.sleep(10)
