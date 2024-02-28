@@ -17,6 +17,9 @@ messageID = 0
 carouselSocket = None
 lock = threading.Lock()
 
+#global carousel array
+carousels = []
+
 #Define the commands
 commands = {
     "COMMAND_CAROUSEL_CONFIG": 87,
@@ -392,41 +395,7 @@ def createPacket(command, data, programID, eventID):
     return packet
 
 
-def addServices(servicesConfigFile):
-    """
-    A function to add services to the carousel
-    Parameters:
-    servicesConfigFile: The services file
-    Returns:
-    None
-    """
-    with open(servicesConfigFile, 'r') as file:
-        """
-        # Skip the first line (headers)
-        next(file)
-        """
-        #skip the first 3 lines (headers)
-        for i in range (0,3):
-            next(file)
-        # Read each line of the CSV file
-        for line in file:
-            # Split the line by comma (assuming it's a CSV file)
-            columns = line.strip().split(',')
-            if (len(columns) != 5):
-                print(f"{getTimestampString()}Carousel Config File Error: Carousel Data Insufficient")
-                break
-            scte35_Service_Id = int(columns[0])
-            scte35_PID = int(columns[1])
-            scte35_Rate = int(columns[2])
-            channelName = columns[3]
-            channelTag = int(columns[4])
-            #create the string
-            string = f"{scte35_Service_Id},{scte35_PID},{scte35_Rate},{channelName},{channelTag}"
-            #convert to bytes
-            bytesToSend = string.encode('ascii')
-            packet = createPacket("COMMAND_CAROUSEL_ADD_STREAM", bytesToSend, channelTag, 0)
-            print(f"\n{getTimestampString()}Adding Stream {channelName} to Primary Carousel")
-            sendMessageTCP(packet)
+
             
             
  
@@ -537,7 +506,7 @@ def configureCarousel(carouselConfig):
             print(f"{getTimestampString()}Carousel Config File Error: No Carousel Data")
         else:   
             columns = line.strip().split(',')
-            if (len(columns) != 13):
+            if (len(columns) != 18):
                 print(f"{getTimestampString()}Carousel Config File Error: Carousel Data Insufficient")
             else:   
                 carouselIP = columns[0]
@@ -553,8 +522,15 @@ def configureCarousel(carouselConfig):
                 streamSourceIP = columns[10]
                 streamSourcePort = int(columns[11])
                 hintDelay = int(columns[12])
+                #more data for add service
+                scte35_Service_Id = int(columns[13])
+                scte35_PID = int(columns[14])
+                scte35_Rate = int(columns[15])
+                channelName = columns[16]
+                channelTag = int(columns[17])
                 
                 
+                #CONFIGURE THE CAROUSEL
                 #create the string
                 string = f"{hintIP},{hintPort},{streamSourceIP},{streamSourcePort},{streamDestIP},{streamDestPort},{bitrate},{patRate},{pmtRate},{pmtPID}"
                 #convert to bytes
@@ -563,8 +539,21 @@ def configureCarousel(carouselConfig):
                 print(f"\n{getTimestampString()}Sending Carousel Config Data")
                 sendMessageTCP(packet)
                 
-
-            
+                #ADD THE SERVICE TO THE CAROUSEL
+                #create the string
+                string = f"{scte35_Service_Id},{scte35_PID},{scte35_Rate},{channelName},{channelTag}"
+                #convert to bytes
+                bytesToSend = string.encode('ascii')
+                packet = createPacket("COMMAND_CAROUSEL_ADD_STREAM", bytesToSend, channelTag, 0)
+                print(f"\n{getTimestampString()}Adding Stream {channelName} to Primary Carousel")
+                sendMessageTCP(packet)
+                
+                #ADD CAROUSEL TO ARRAY
+                global carousels
+                carousels.append(channelName)
+                
+                
+               
 
 #Main
 if __name__ == "__main__":
@@ -575,7 +564,7 @@ if __name__ == "__main__":
     
     #set file names
     hintConfigFile = "hintConfig.csv"
-    carouselConfigFile = "carouselConfig.csv"
+    carouselConfigFile = "carouselConfigV2.csv"
     #servicesConfigFile = "servicesConfig.csv"
     eventsScheduleFile = "eventSchedule.csv"
     
@@ -609,8 +598,7 @@ if __name__ == "__main__":
     #NEED NEW VERSION OF CAROUSEL CODE.
     configureCarousel(carouselConfigFile)
     
-    #add the services to the carousel
-    addServices(carouselConfigFile)
+    
     
     #Get a schedule of the events
     parseEvents(eventsScheduleFile)
